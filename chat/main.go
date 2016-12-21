@@ -17,7 +17,12 @@ import (
     "github.com/stretchr/objx"
     "gopkg.in/yaml.v2"
 )
-
+// set the active Avatar implementation
+var avatars Avatar = TryAvatars{
+    UseFileSystemAvatar,
+    UseAuthAvatar,
+    UseGravatar,
+}
 type instanceConfig struct {
     SecurityKey  string `yaml:"security_key"`
     Google       map[string]string
@@ -106,9 +111,26 @@ func main() {
     )
 
     r := newRoom()
+    http.Handle("/", MustAuth(&templateHandler{filename: "login.html"}))
     http.Handle("/chat", MustAuth(&templateHandler{filename: "chat.html"}))
     http.Handle("/login", &templateHandler{filename: "login.html"})
+    http.Handle("/upload", &templateHandler{filename: "upload.html"})
+    http.Handle("/avatars/",
+        http.StripPrefix("/avatars/",
+            http.FileServer(http.Dir("./avatars"))))
     http.HandleFunc("/auth/", loginHandler)
+    http.HandleFunc("/uploader", uploaderHandler)
+    http.HandleFunc("/logout/", func(w http.ResponseWriter,
+                                     r *http.Request) {
+      http.SetCookie(w, &http.Cookie{
+          Name:   "auth",
+          Value:  "",
+          Path:   "/",
+          MaxAge: -1,
+      })
+      w.Header()["Location"] = []string{"/chat"}
+      w.WriteHeader(http.StatusTemporaryRedirect)
+    })
     http.Handle("/room", r)
     // get the room going
     go r.run()
